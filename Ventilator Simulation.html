@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OR Ventilator Simulator — McMaster Anesthesia</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#c8cdd4;font-family:'Rajdhani',sans-serif;padding:10px;}
+
+.monitor-shell{
+  background:linear-gradient(160deg,#dde2e8 0%,#c0c6ce 100%);
+  border-radius:18px;
+  padding:10px 10px 14px 10px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.35),inset 0 1px 0 rgba(255,255,255,0.6);
+  max-width:960px;
+  margin:0 auto;
+}
+.brand-bar{
+  text-align:center;font-family:'Rajdhani',sans-serif;
+  font-size:15px;font-weight:700;color:#1a3fa0;
+  letter-spacing:2px;padding:3px 0 5px;
+}
+.screen{
+  background:#000;border-radius:6px;overflow:hidden;
+  display:grid;
+  grid-template-columns:1fr 230px 110px;
+  grid-template-rows:36px 1fr 1fr 1fr 1fr 38px;
+  height:520px;position:relative;
+}
+.top-bar{
+  grid-column:1/4;background:#1a4fa8;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 12px;color:#fff;font-size:11px;letter-spacing:0.5px;
+}
+.top-bar .clock{font-family:'Share Tech Mono',monospace;font-size:22px;font-weight:700;color:#fff;}
+.alarm-flash{animation:alarm-f 0.9s ease-in-out infinite;}
+@keyframes alarm-f{0%,100%{opacity:1}50%{opacity:0.3}}
+
+.wave-row{
+  grid-column:1/2;border-bottom:1px solid #111;
+  position:relative;overflow:hidden;cursor:pointer;
+}
+.wave-row:hover{background:#030803;}
+.wave-label{position:absolute;top:3px;left:6px;font-size:9px;letter-spacing:0.5px;font-family:'Share Tech Mono',monospace;z-index:2;opacity:0.85;}
+.wave-scale{position:absolute;top:3px;right:6px;font-size:8px;font-family:'Share Tech Mono',monospace;opacity:0.5;color:#fff;}
+canvas{display:block;width:100%;height:100%;}
+
+.num-panel{
+  grid-column:2/3;border-left:2px solid #111;border-bottom:1px solid #111;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:4px 10px;cursor:pointer;position:relative;transition:background 0.15s;
+}
+.num-panel:hover{background:#0a0a0a;}
+.num-param{font-size:9px;letter-spacing:0.8px;font-family:'Share Tech Mono',monospace;opacity:0.7;margin-bottom:1px;}
+.num-unit{font-size:9px;opacity:0.6;font-family:'Share Tech Mono',monospace;}
+.num-big{font-size:42px;font-weight:700;line-height:1;font-family:'Rajdhani',sans-serif;}
+.num-sub-row{display:flex;gap:16px;margin-top:2px;}
+.num-sub{display:flex;flex-direction:column;}
+.num-sub-label{font-size:8px;opacity:0.55;font-family:'Share Tech Mono',monospace;}
+.num-sub-val{font-size:18px;font-weight:700;font-family:'Rajdhani',sans-serif;line-height:1;}
+.click-hint{position:absolute;bottom:3px;right:6px;font-size:7px;color:#333;font-family:'Share Tech Mono',monospace;}
+
+.sidebar{
+  grid-column:3/4;grid-row:2/6;
+  border-left:2px solid #1a2a1a;background:#0a120a;
+  display:flex;flex-direction:column;gap:4px;
+  padding:6px 5px;overflow:hidden;
+}
+.sb-btn{
+  background:#1a2e1a;border:1px solid #2a4a2a;border-radius:4px;
+  color:#9fcf9f;font-size:9px;padding:5px 4px;text-align:center;
+  cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:0.3px;
+  transition:all 0.15s;line-height:1.3;
+}
+.sb-btn:hover{background:#224022;border-color:#4a8a4a;color:#bfffbf;}
+.sb-btn.mode-active{background:#0a2a0a;border-color:#00e676;color:#00e676;}
+
+.bottom-bar{
+  grid-column:1/4;background:#0a0f0a;border-top:2px solid #1a2a1a;
+  display:flex;align-items:center;padding:0 10px;gap:20px;flex-wrap:wrap;
+}
+.bot-param{display:flex;flex-direction:column;cursor:pointer;}
+.bot-label{font-size:8px;color:#4a7a4a;font-family:'Share Tech Mono',monospace;letter-spacing:0.5px;}
+.bot-val{font-size:13px;font-weight:700;font-family:'Rajdhani',sans-serif;}
+.mode-display{margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:10px;color:#00bcd4;letter-spacing:1px;}
+
+.info-overlay{
+  display:none;position:absolute;bottom:38px;left:0;right:110px;
+  background:rgba(0,5,0,0.97);border:1px solid #00e676;border-radius:4px;
+  padding:14px;z-index:100;font-family:'Rajdhani',sans-serif;
+  max-height:260px;overflow-y:auto;
+}
+.info-overlay.visible{display:block;}
+.info-title-bar{
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid #1a4a1a;padding-bottom:6px;margin-bottom:8px;
+}
+.info-title-text{font-size:12px;font-weight:700;color:#00e676;font-family:'Share Tech Mono',monospace;letter-spacing:0.5px;}
+.info-close-btn{
+  background:none;border:1px solid #2a4a2a;color:#4a7a4a;
+  font-family:'Share Tech Mono',monospace;font-size:8px;
+  padding:2px 7px;border-radius:2px;cursor:pointer;
+}
+.info-close-btn:hover{color:#ff4444;border-color:#ff4444;}
+.info-content{font-size:11px;line-height:1.7;color:#8fbf8f;}
+.info-content strong{color:#e8f5e9;font-weight:600;}
+.ic-hl{color:#00bcd4;}
+.ic-alarm{color:#ff9800;}
+.ic-danger{color:#ff4444;}
+.ic-normal{color:#5a8a5a;}
+
+.c-green{color:#00e676;}
+.c-yellow{color:#ffea00;}
+.c-cyan{color:#00bcd4;}
+.c-orange{color:#ff9800;}
+
+.monitor-bottom{display:flex;align-items:center;justify-content:space-between;padding:6px 16px 2px;}
+.power-btn{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#5c5,#292);border:2px solid #1a4a1a;cursor:pointer;box-shadow:0 0 6px rgba(0,200,100,0.4);}
+.brand-bottom{font-size:13px;color:#444;font-style:italic;font-weight:600;letter-spacing:1px;}
+.knob{width:32px;height:32px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#888,#333);border:2px solid #555;box-shadow:0 2px 6px rgba(0,0,0,0.5);}
+</style>
+</head>
+<body>
+
+<div class="monitor-shell">
+  <div class="brand-bar">Dräger</div>
+  <div class="screen" id="mainScreen">
+
+    <div class="top-bar">
+      <div style="display:flex;gap:12px;align-items:center;">
+        <span>🧍 Adult · 70kg</span>
+        <span style="color:#adf;font-size:10px;">Bed 4 · OR-2</span>
+        <span style="color:#adf;font-size:10px;">Lap. Cholecystectomy</span>
+      </div>
+      <div class="clock" id="clock">18:21</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="color:#ffea00;font-size:9px;" class="alarm-flash">▲ PIP HIGH</span>
+        <span style="font-size:10px;color:#fff;opacity:0.8;">🔔 30%</span>
+      </div>
+    </div>
+
+    <!-- Pressure waveform row -->
+    <div class="wave-row" onclick="showInfo('pip')">
+      <div class="wave-label c-green">Paw &nbsp;<span style="font-size:7px;opacity:0.5">cmH₂O</span></div>
+      <div class="wave-scale">40<br><br><br>0</div>
+      <canvas id="c-paw"></canvas>
+    </div>
+    <div class="num-panel" onclick="showInfo('pip')" style="grid-row:2;">
+      <div class="num-param c-cyan">PIP &nbsp;<span class="num-unit">cmH₂O</span></div>
+      <div class="num-big c-cyan">28.0</div>
+      <div class="num-sub-row">
+        <div class="num-sub"><span class="num-sub-label c-yellow">Pplat</span><span class="num-sub-val c-yellow">22.0</span></div>
+        <div class="num-sub"><span class="num-sub-label c-cyan">Pmean</span><span class="num-sub-val c-cyan">11.0</span></div>
+      </div>
+      <div class="click-hint">▸ tap to learn</div>
+    </div>
+
+    <!-- Flow waveform row -->
+    <div class="wave-row" onclick="showInfo('flow-wave')">
+      <div class="wave-label c-cyan">Flow &nbsp;<span style="font-size:7px;opacity:0.5">L/min</span></div>
+      <div class="wave-scale">60<br><br><br>-40</div>
+      <canvas id="c-flow"></canvas>
+    </div>
+    <div class="num-panel" onclick="showInfo('etco2')" style="grid-row:3;">
+      <div class="num-param c-yellow">ETCO₂ &nbsp;<span class="num-unit">mmHg</span></div>
+      <div class="num-big c-yellow">38</div>
+      <div class="num-sub-row">
+        <div class="num-sub"><span class="num-sub-label" style="color:#ff9800;">RRc</span><span class="num-sub-val" style="color:#ff9800;">14</span></div>
+        <div class="num-sub"><span class="num-sub-label" style="color:#888;">inCO₂</span><span class="num-sub-val" style="color:#888;">0</span></div>
+      </div>
+      <div class="click-hint">▸ tap to learn</div>
+    </div>
+
+    <!-- ETCO2 capnography waveform row -->
+    <div class="wave-row" onclick="showInfo('etco2')" style="background:#060800;">
+      <div class="wave-label c-yellow">ETCO₂ &nbsp;<span style="font-size:7px;opacity:0.5">mmHg</span></div>
+      <div class="wave-scale">50<br><br><br>0</div>
+      <canvas id="c-etco2"></canvas>
+    </div>
+    <div class="num-panel" onclick="showInfo('peep')" style="grid-row:4;">
+      <div class="num-param c-green">PEEP &nbsp;<span class="num-unit">cmH₂O</span></div>
+      <div class="num-big c-green">5.0</div>
+      <div class="num-sub-row">
+        <div class="num-sub"><span class="num-sub-label c-cyan">Comp</span><span class="num-sub-val c-cyan">32</span></div>
+        <div class="num-sub"><span class="num-sub-label" style="color:#888;">mL/cm</span><span class="num-sub-val" style="color:#888;font-size:11px;">H₂O</span></div>
+      </div>
+      <div class="click-hint">▸ tap to learn</div>
+    </div>
+
+    <!-- Volume waveform row -->
+    <div class="wave-row" onclick="showInfo('vt')">
+      <div class="wave-label" style="color:#ff9800;">Vol &nbsp;<span style="font-size:7px;opacity:0.5">mL</span></div>
+      <div class="wave-scale" style="color:#ff9800;">600<br><br><br>0</div>
+      <canvas id="c-vol"></canvas>
+    </div>
+    <div class="num-panel" onclick="showInfo('mv')" style="grid-row:5;">
+      <div class="num-param" style="color:#80deea;">MV &nbsp;<span class="num-unit">L/min</span></div>
+      <div class="num-big" style="color:#80deea;">7.0</div>
+      <div class="num-sub-row">
+        <div class="num-sub"><span class="num-sub-label c-green">VT</span><span class="num-sub-val c-green">500</span></div>
+        <div class="num-sub"><span class="num-sub-label c-orange">RR</span><span class="num-sub-val c-orange">14</span></div>
+      </div>
+      <div class="click-hint">▸ tap to learn</div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div style="font-size:8px;color:#2a5a2a;text-align:center;letter-spacing:0.5px;margin-bottom:2px;font-family:'Share Tech Mono',monospace;">MODE</div>
+      <div class="sb-btn mode-active" onclick="showMode(this,'VCV')">VCV</div>
+      <div class="sb-btn" onclick="showMode(this,'PCV')">PCV</div>
+      <div class="sb-btn" onclick="showMode(this,'PRVC')">PRVC</div>
+      <div class="sb-btn" onclick="showMode(this,'PSV')">PSV</div>
+      <div class="sb-btn" onclick="showMode(this,'SIMV')">SIMV</div>
+      <div style="height:1px;background:#1a3a1a;margin:2px 0;"></div>
+      <div style="font-size:8px;color:#2a5a2a;text-align:center;letter-spacing:0.5px;margin-bottom:2px;font-family:'Share Tech Mono',monospace;">LEARN</div>
+      <div class="sb-btn" onclick="showInfo('lung-protect')">Lung Prot.</div>
+      <div class="sb-btn" onclick="showInfo('ards')">ARDS</div>
+      <div class="sb-btn" onclick="showInfo('obst')">Obstr.</div>
+      <div class="sb-btn" onclick="showInfo('laparoscopic')">Lap. Surg.</div>
+      <div class="sb-btn" onclick="showInfo('recruitment')">Recruit.</div>
+      <div class="sb-btn" onclick="showInfo('waveforms')">Waveforms</div>
+      <div class="sb-btn" onclick="showInfo('pip-plat')">PIP vs Plat</div>
+      <div class="sb-btn" onclick="showInfo('circuit-check')">Pre-case Chk</div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="bottom-bar">
+      <div class="bot-param" onclick="showInfo('vt')"><span class="bot-label">TIDAL VOL</span><span class="bot-val" style="color:#00e676;">500 <span style="font-size:9px;color:#4a7a4a;">mL</span></span></div>
+      <div class="bot-param" onclick="showInfo('rr')"><span class="bot-label">RESP RATE</span><span class="bot-val" style="color:#ff9800;">14 <span style="font-size:9px;color:#4a7a4a;">br/min</span></span></div>
+      <div class="bot-param" onclick="showInfo('ie')"><span class="bot-label">I:E RATIO</span><span class="bot-val" style="color:#fff;">1:2</span></div>
+      <div class="bot-param" onclick="showInfo('fio2')"><span class="bot-label">FiO₂</span><span class="bot-val" style="color:#00bcd4;">40 <span style="font-size:9px;color:#4a7a4a;">%</span></span></div>
+      <div class="bot-param" onclick="showInfo('peep')"><span class="bot-label">PEEP SET</span><span class="bot-val" style="color:#00bcd4;">5 <span style="font-size:9px;color:#4a7a4a;">cmH₂O</span></span></div>
+      <div class="bot-param" onclick="showInfo('flow')"><span class="bot-label">FLOW</span><span class="bot-val" style="color:#fff;">35 <span style="font-size:9px;color:#4a7a4a;">L/min</span></span></div>
+      <div class="bot-param" onclick="showInfo('plat')"><span class="bot-label">PLATEAU</span><span class="bot-val" style="color:#ffea00;">22.0 <span style="font-size:9px;color:#4a7a4a;">cmH₂O</span></span></div>
+      <div class="mode-display" id="mode-disp">VCV</div>
+    </div>
+
+    <!-- Info overlay panel -->
+    <div class="info-overlay" id="infoPanel">
+      <div class="info-title-bar">
+        <span class="info-title-text" id="infoTitle">INFO</span>
+        <button class="info-close-btn" onclick="closeInfo()">✕ CLOSE</button>
+      </div>
+      <div class="info-content" id="infoBody"></div>
+    </div>
+
+  </div><!-- /screen -->
+
+  <div class="monitor-bottom">
+    <div class="power-btn"></div>
+    <div class="brand-bottom">Infinity C700</div>
+    <div class="knob"></div>
+  </div>
+</div>
+
+<script>
+// =============================================================
+// HOW TO EDIT THE POP-UP EXPLANATIONS
+// =============================================================
+// Each entry below has a KEY (e.g. 'pip') and two fields:
+//   title: the heading shown in the pop-up (plain text)
+//   body:  the content shown (HTML allowed)
+//
+// HTML tips for formatting your body text:
+//   <strong>bold text</strong>
+//   <br>          = line break
+//   <br><br>      = blank line / paragraph gap
+//   <span class="ic-hl">cyan highlight</span>
+//   <span class="ic-alarm">orange warning text</span>
+//   <span class="ic-danger">red danger text</span>
+//   <span class="ic-normal">muted green text</span>
+//
+// TO EDIT: find the key you want (e.g. pip, etco2, peep)
+//          and change the title or body text between the quotes.
+//          Be careful not to delete any commas or backticks.
+//
+// TO ADD A NEW ENTRY: copy an existing block, change the key
+//   name, and add a new sidebar button pointing to it.
+// =============================================================
+
+const INFO = {
+
+  // ── NUMERIC PANEL POP-UPS ─────────────────────────────────
+
+  pip: {
+    title: 'PEAK INSPIRATORY PRESSURE (PIP)',
+    body: `<strong>What it is:</strong> Highest airway pressure during inspiration — reflects both resistance and compliance.<br><br>
+<strong>Normal OR range:</strong> <span class="ic-hl">15–30 cmH₂O</span><br><br>
+<strong>High PIP Causes (DOPES mnemonic):</strong><br>
+<span class="ic-alarm">D</span> – Displacement (right mainstem intubation)<br>
+<span class="ic-alarm">O</span> – Obstruction (secretions, kinked ETT, biting)<br>
+<span class="ic-alarm">P</span> – Pneumothorax<br>
+<span class="ic-alarm">E</span> – Equipment failure<br>
+<span class="ic-alarm">S</span> – Spasm / Stacking / Surgical (pneumoperitoneum)<br><br>
+<strong>Key concept:</strong> PIP alone doesn't distinguish resistance vs compliance — compare to Plateau Pressure. Large PIP–Pplat gap = resistance problem. Small gap = compliance problem. Helps to differentiate airway resistance vs lung stiffness.`
+  },
+
+  plat: {
+    title: 'PLATEAU PRESSURE (Pplat)',
+    body: `<strong>What it is:</strong> Pressure during inspiratory pause (airflow = 0) — reflects <em>static lung compliance only</em> (alveolar pressure), excluding airway resistance.<br><br>
+<strong>Target:</strong> <span class="ic-hl">&lt; 30 cmH₂O</span> (lung-protective: keep ≤28)<br><br>
+<strong>How to measure:</strong> Apply end-inspiratory hold 0.5–2s — pressure drops from PIP and plateaus at Pplat.<br><br>
+<strong>Driving pressure = Pplat − PEEP.</strong> Keep <span class="ic-hl">&lt;15 cmH₂O</span> — strongest predictor of ARDS outcome.<br><br>
+Large PIP–Pplat gap → airway resistance ↑ (bronchospasm, obstruction)<br>
+Small PIP–Pplat gap → lung compliance ↓ (ARDS, pneumothorax, laparoscopy)`
+  },
+
+  etco2: {
+    title: 'END-TIDAL CO₂ (ETCO₂)',
+    body: `<strong>Normal:</strong> <span class="ic-hl">35–45 mmHg</span> (ETCO₂ typically 2–5 mmHg below arterial PaCO₂)<br><br>
+<strong>Sudden ETCO₂ drop → emergency differential:</strong><br>
+<span class="ic-danger">→ Cardiac arrest (no perfusion = no CO₂ delivery to lungs)</span><br>
+<span class="ic-danger">→ Circuit disconnection / esophageal intubation</span><br>
+<span class="ic-danger">→ Massive pulmonary embolism</span><br>
+<span class="ic-danger">→ Severe hypotension</span><br><br>
+<strong>Gradual ETCO₂ rise → think:</strong><br>
+Hypoventilation · fever · malignant hyperthermia · laparoscopy CO₂ absorption · exhausted absorber<br><br>
+<strong>Waveform — shark-fin shape</strong> = obstructive disease (COPD/asthma): sloped expiratory plateau instead of flat`
+  },
+
+  peep: {
+    title: 'PEEP — POSITIVE END-EXPIRATORY PRESSURE',
+    body: `<strong>What it does:</strong> Maintains airway pressure at end-expiration → prevents alveolar collapse, improves FRC + oxygenation + V/Q matching, reduces shunt + WOB.<br><br>
+<strong>Standard intraoperative:</strong> <span class="ic-hl">5 cmH₂O (individualized based on oxygenation, lung mechanic, hemodynamics.</span><br><br>
+<strong>Higher PEEP (8–15) in:</strong> ARDS · morbid obesity · one-lung ventilation · prone positioning<br><br>
+<strong>Too much PEEP causes:</strong><br>
+<span class="ic-alarm">→ ↓ Cardiac output (impairs venous return) = hypotension</span><br>
+<span class="ic-alarm">→ Overdistension of open alveoli (barotrauma)</span><br>
+<span class="ic-alarm">→ ↑ ICP (caution in neuroanaesthesia)</span><br><br>
+<strong>Intrinsic PEEP (auto-PEEP):</strong> Air trapping in obstructive disease — expiratory flow waveform doesn't return to zero before the next breath. Can cause increased WOB + haemodynamic collapse.`
+  },
+
+  mv: {
+    title: 'MINUTE VENTILATION (MV)',
+    body: `<strong>Formula:</strong> <span class="ic-hl">MV = Tidal Volume × Respiratory Rate</span><br>
+This patient: 500 mL × 14 br/min = 7.0 L/min ✓<br><br>
+<strong>Normal:</strong> 5–8 L/min<br><br>
+↑ MV → ↓ PaCO₂ (hyperventilation)<br>
+↓ MV → ↑ PaCO₂ (hypoventilation)<br><br>
+<strong>Titrate MV to keep ETCO₂ at 35–45 mmHg.</strong><br><br>
+<strong>↑ MV required in:</strong><br>
+· Metabolic acidosis (respiratory compensation)<br>
+· Laparoscopic CO₂ insufflation<br>
+· Fever / malignant hyperthermia<br>
+· Hyperthyroidism`
+  },
+
+  // ── BOTTOM BAR POP-UPS ────────────────────────────────────
+
+  vt: {
+    title: 'TIDAL VOLUME (VT)',
+    body: `<strong>Lung-protective setting:</strong> <span class="ic-hl">6–8 mL/kg ideal body weight (IBW)</span><br><br>
+<strong>IBW formula (male):</strong> 50 + 0.91 × (height cm − 152.4)<br>
+<strong>IBW formula (female):</strong> 45.5 + 0.91 × (height cm − 152.4)<br><br>
+70 kg IBW: 6×70 = 420 mL → 8×70 = 560 mL. This patient at 500 mL ✓<br><br>
+<strong>Why IBW not actual weight?</strong> Lung size correlates with height, not obesity. Using actual weight in obese patients → volutrauma.<br><br>
+<strong>ARDS:</strong> Reduce to 4–6 mL/kg IBW (ARDSNet trial — mortality benefit vs 12 mL/kg)`
+  },
+
+  rr: {
+    title: 'RESPIRATORY RATE (RR)',
+    body: `<strong>Standard intraoperative:</strong> <span class="ic-hl">10–16 breaths/min</span><br><br>
+Titrate RR to achieve ETCO₂ 35–45 mmHg.<br><br>
+<strong>In COPD/asthma:</strong> Lower RR (8–12) to allow full expiration — prevents auto-PEEP and air trapping.<br><br>
+<strong>In laparoscopic cases:</strong> Often ↑ RR by 2–4 br/min to compensate for peritoneal CO₂ absorption.<br><br>
+<strong>Permissive hypercapnia:</strong> In severe ARDS or obstructive disease, accept higher PaCO₂ (45–60 mmHg) to allow lower RR and VT — reduces ventilator-induced lung injury (VILI).`
+  },
+
+  ie: {
+    title: 'I:E RATIO',
+    body: `<strong>Standard:</strong> <span class="ic-hl">1:2</span> — expiration twice as long as inspiration (physiological)<br><br>
+Expiration is normally passive — driven by elastic recoil. Adequate expiratory time (Te) prevents air trapping.<br><br>
+<strong>Inverse ratio ventilation (IRV) — 1:1 or 2:1:</strong><br>
+Recruits alveoli via prolonged inspiration. Used in severe ARDS. Causes auto-PEEP. Requires deep sedation/paralysis.<br><br>
+<strong>In obstructive disease (COPD/asthma):</strong> Use 1:3 or 1:4 — longer expiration to clear trapped air.<br><br>
+At RR 14, I:E 1:2: cycle time = 4.3s → Ti = 1.4s, Te = 2.9s`
+  },
+
+  fio2: {
+    title: 'FiO₂ — FRACTION OF INSPIRED OXYGEN',
+    body: `<strong>Standard intraoperative maintenance:</strong> <span class="ic-hl">0.40–0.60 (40–60%)</span><br><br>
+<strong>Preoxygenation:</strong> FiO₂ 1.0 for 3–5 min before induction — denitrogenates and builds O₂ reserve.<br>
+Critical in: obese patients, pregnant patients, paediatric patients (low FRC).<br><br>
+<strong>High FiO₂ (0.8–1.0) indicated for:</strong><br>
+· CO poisoning · One-lung ventilation · Difficult/failed airway · Suspected pneumothorax<br><br>
+<strong>Caution with volatile agents + high FiO₂:</strong> Risk of airway fire with electrocautery in head/neck cases.`
+  },
+
+  flow: {
+    title: 'INSPIRATORY FLOW RATE',
+    body: `<strong>Standard:</strong> <span class="ic-hl">30–60 L/min</span><br><br>
+<strong>Higher flow:</strong><br>
+Shorter inspiratory time → longer expiratory time (useful in obstructive disease).<br>
+↑ PIP without changing Pplat. May worsen patient-ventilator dyssynchrony.<br><br>
+<strong>Lower flow:</strong><br>
+Longer inspiratory time (may recruit). ↓ PIP. More comfortable for spontaneously breathing patients.<br><br>
+<strong>Flow waveforms in VCV:</strong><br>
+· Square wave: constant flow — higher PIP<br>
+· Decelerating ramp: tapers during inspiration — lower PIP, better gas distribution<br><br>
+In PCV/PRVC: flow is variable — ventilator adjusts to achieve pressure target.`
+  },
+
+  // ── WAVEFORM POP-UPS ──────────────────────────────────────
+
+  'flow-wave': {
+    title: 'READING VENTILATOR WAVEFORMS',
+    body: `<strong><span style="color:#00e676;">Pressure-Time (green, top):</span></strong><br>
+Baseline = PEEP, Peak = PIP.<br>
+Helps assess lung compliance and ventilation mode.<br>
+Trapezoidal (rising curve) in VCV. Exponential rise (square-shaped) in PCV. <span class="ic-alarm">Spikes = coughing, ETT biting, circuit issue.</span><br><br>
+<span class="ic-alarm">Sudden spike = coughing, ETT biting, bronchospasm, or circuit issue.</span><br><br>
+<strong><span style="color:#00bcd4;">Flow-Time (cyan, 2nd):</span></strong><br>
+Above zero = inspiration; below = expiration. <span class="ic-alarm">Does not return to zero before next breath → auto-PEEP / air trapping.</span><br>
+Patterns by Mode: VCV = square (constrant flow), PCV/PSV = decelerating ramp.<br>
+High peak expiratory flow = low compliance.<br>
+Shark-fin expiratory limb (prolonged return to baseline) = obstructive disease.<br><br>
+<strong><span style="color:#ffea00;">ETCO₂ Capnography (yellow, 3rd):</span></strong><br>
+4 phases: dead space (near 0) → expiratory upslope → alveolar plateau (flat/slight upward) → inspiratory downstroke to baseline → next breath starts.<br>
+Sloped/shark-fin plateau = obstructive disease. Elevated baseline = CO₂ rebreathing (exhausted absorber - look down and check the color!).<br><br>
+<strong><span style="color:#ff9800;">Volume-Time (orange, bottom):</span></strong><br>
+Rises during inspiration, returns to baseline on expiration (typically similar).<br>
+<span class="ic-alarm">Incomplete return to zero = air trapping or circuit leak.</span> Read tidal volume directly from peak.<br><br>
+<strong>Tip:</strong> Always interpret all four waveforms together — patterns tell you whether you're dealing with a resistance problem, a compliance problem, or a leak.<br>
+Ex. A stiff lung, an obstructed airway, and a circuit leak each produce a distinct pattern across the set.`
+  },
+
+  // ── SIDEBAR LEARNING MODULES ──────────────────────────────
+
+  'pip-plat': {
+    title: 'PIP vs PLATEAU — THE CLINICAL KEY',
+    body: `<strong>PIP</strong> = pressure during active gas flow = resistance + compliance<br>
+<strong>Pplat</strong> = pressure after flow stops = <span class="ic-hl">compliance only</span><br><br>
+<strong>Interpreting the gap:</strong><br>
+<strong>Large gap (PIP >> Pplat):</strong> ↑ Airway resistance → bronchospasm, secretions, kinked/small ETT<br>
+<strong>Small gap (PIP ≈ Pplat):</strong> ↓ Lung compliance → ARDS, pneumothorax, pneumoperitoneum, obesity<br><br>
+<strong>Driving pressure = Pplat − PEEP</strong><br>
+Target <span class="ic-hl">&lt;15 cmH₂O</span> — strongest predictor of ARDS mortality.<br><br>
+<strong>Scenario summary:</strong><br>
+Bronchospasm: PIP↑↑, Pplat normal → big gap<br>
+ARDS: PIP↑, Pplat↑ → small gap<br>
+Pneumothorax: PIP↑↑, Pplat↑↑ → small gap<br>
+ETT kink: PIP↑↑, Pplat normal → big gap`
+  },
+
+  'lung-protect': {
+    title: 'LUNG-PROTECTIVE VENTILATION',
+    body: `<strong>Core principles (apply to ALL intubated patients):</strong><br><br>
+1. <strong>VT 6–8 mL/kg IBW</strong> → prevents volutrauma<br>
+2. <strong>Pplat &lt; 30 cmH₂O</strong> → prevents barotrauma<br>
+3. <strong>Driving pressure &lt; 15 cmH₂O</strong> (Pplat − PEEP) → strongest predictor of ARDS mortality<br>
+4. <strong>PEEP ≥ 5 cmH₂O</strong> → prevents atelectrauma (repeated alveolar open/collapse)<br>
+5. <strong>Lowest FiO₂ to maintain SpO₂ 88–95%</strong><br><br>
+<strong>IMPROVE trial:</strong> Lung-protective ventilation in at-risk surgical patients → ↓ postoperative pulmonary complications.<br><br>
+<strong>PROVE Network trial:</strong> Individualized PEEP + moderate VT + recruitment manoeuvres → improved outcomes in abdominal surgery.`
+  },
+
+  ards: {
+    title: 'ARDS VENTILATOR MANAGEMENT',
+    body: `<strong>Berlin Definition (2012):</strong><br>
+Acute onset (&lt;1 week) · bilateral infiltrates on CXR · not fully explained by cardiac failure · PaO₂/FiO₂: mild 200–300 / moderate 100–200 / severe &lt;100<br><br>
+<strong>ARDSNet ventilator protocol:</strong><br>
+· VT: <span class="ic-hl">6 mL/kg IBW</span> (can reduce to 4 if Pplat elevated)<br>
+· Pplat ≤ 30 cmH₂O<br>
+· PEEP: titrate via ARDSNet PEEP/FiO₂ table<br>
+· Target SpO₂ 88–95%, PaO₂ 55–80 mmHg<br>
+· Accept pH ≥7.30 (permissive hypercapnia)<br><br>
+<strong>Rescue strategies:</strong><br>
+· Prone positioning 16h/day (PROSEVA trial — mortality benefit in severe ARDS)<br>
+· Neuromuscular blockade · Recruitment manoeuvres<br>
+· Inhaled NO or prostacyclin · VV-ECMO if refractory`
+  },
+
+  obst: {
+    title: 'OBSTRUCTIVE DISEASE IN THE OR',
+    body: `<strong>Primary concern: Air trapping → auto-PEEP → haemodynamic collapse</strong><br><br>
+<strong>Ventilator strategy:</strong><br>
+· ↓ RR to 8–12 br/min — more time per breath cycle<br>
+· ↑ I:E ratio to 1:3 or 1:4 — longer expiration<br>
+· Lower VT (6–7 mL/kg)<br>
+· Tolerate permissive hypercapnia (PaCO₂ 45–60)<br>
+· Set PEEP below measured auto-PEEP<br><br>
+<strong>Detecting auto-PEEP:</strong> End-expiratory occlusion — observe whether flow returns to zero before next breath.<br><br>
+<strong>Intraoperative bronchospasm:</strong><br>
+<span class="ic-alarm">Sudden ↑ PIP + wheeze + ↑ ETCO₂</span><br>
+→ Deepen anaesthesia (volatile agents are bronchodilators)<br>
+→ Salbutamol via ETT · IV ketamine<br>
+→ Rule out pneumothorax and ETT malposition`
+  },
+
+  laparoscopic: {
+    title: 'LAPAROSCOPIC VENTILATION CONSIDERATIONS',
+    body: `<strong>Effects of CO₂ pneumoperitoneum:</strong><br>
+1. IAP 12–15 mmHg → diaphragm elevation → ↓ FRC → atelectasis<br>
+2. CO₂ absorption from peritoneum → ↑ ETCO₂ and PaCO₂<br>
+3. ↓ Lung compliance (expect Pplat ↑ by 5–10 cmH₂O)<br>
+4. Trendelenburg position compounds all of the above<br><br>
+<strong>Ventilator adjustments at insufflation:</strong><br>
+· <span class="ic-hl">↑ RR by 2–4 br/min</span> to compensate for CO₂ absorption<br>
+· Consider ↑ PEEP to 8 cmH₂O to offset atelectasis<br>
+· Expect ↑ PIP — if sudden onset, urgently rule out pneumothorax<br>
+· Accept ETCO₂ up to ~50 mmHg rather than cause barotrauma<br><br>
+<strong>CO₂ embolism:</strong><br>
+<span class="ic-danger">Sudden ↓ ETCO₂ + haemodynamic collapse = CO₂ embolism until proven otherwise</span><br>
+→ Release pneumoperitoneum · left lateral decubitus · aspirate via CVC`
+  },
+
+  recruitment: {
+    title: 'RECRUITMENT MANOEUVRE',
+    body: `<strong>Goal:</strong> Transiently ↑ airway pressure to re-open collapsed (atelectatic) alveoli.<br><br>
+<strong>Sustained Inflation technique:</strong><br>
+· Apply 30–40 cmH₂O for 30–40 seconds<br>
+· Resume ventilation with adequate PEEP to maintain recruitment<br><br>
+<strong>Staircase (incremental PEEP) technique:</strong><br>
+· Stepwise ↑ PEEP: 5 → 10 → 15 → 20 cmH₂O over several minutes<br>
+· Then decremental PEEP trial to find optimal<br><br>
+<strong>Indications:</strong><br>
+Intraoperative hypoxia with suspected atelectasis · after intubation · after laparoscopic insufflation · after circuit disconnection<br><br>
+<strong>Contraindications:</strong><br>
+<span class="ic-danger">· Haemodynamic instability</span><br>
+<span class="ic-danger">· Pneumothorax (absolute contraindication)</span><br>
+<span class="ic-danger">· Raised intracranial pressure</span><br>
+· Unilateral lung pathology`
+  },
+
+  waveforms: {
+    title: 'WAVEFORM INTERPRETATION GUIDE',
+    body: `<strong><span style="color:#00e676;">Pressure (green, top):</span></strong><br>
+VCV shape: rapid rise to PIP → brief flat plateau (Pplat) → sharp drop → exponential down-slope to PEEP.<br>
+Spikes = patient-ventilator dyssynchrony, coughing, or ETT biting.<br>
+Sustained high PIP with normal Pplat = resistance problem. High PIP + high Pplat = compliance problem.<br><br>
+<strong><span style="color:#00bcd4;">Flow (cyan, 2nd):</span></strong><br>
+Square wave in VCV (constant flow). Decelerating ramp in PCV/PSV.<br>
+<span class="ic-alarm">Expiratory limb must return to zero — if it doesn't → auto-PEEP / air trapping.</span><br>
+Prolonged slow expiratory return (shark-fin) = obstructive disease (COPD/asthma).<br><br>
+<strong><span style="color:#ffea00;">ETCO₂ Capnography (yellow, 3rd):</span></strong><br>
+The 4-phase capnograph waveform per breath:<br>
+· <strong>Phase I</strong> — baseline ~0 mmHg during inspiration and early expiration (dead space)<br>
+· <strong>Phase II</strong> — sharp upstroke as alveolar gas reaches the sensor<br>
+· <strong>Phase III</strong> — flat alveolar plateau; end value = ETCO₂ reading (~38 mmHg here)<br>
+· <strong>Phase 0</strong> — abrupt downstroke when next inspiration begins<br>
+Normal ETCO₂: <span class="ic-hl">35–45 mmHg</span> (2–5 below PaCO₂).<br>
+<span class="ic-alarm">Sudden drop → cardiac arrest, disconnect, massive PE.</span><br>
+Gradual rise → hypoventilation, CO₂ absorption (laparoscopy), MH.<br>
+Sloped Phase III plateau = obstructive pattern. Elevated baseline = CO₂ rebreathing.<br><br>
+<strong><span style="color:#ff9800;">Volume (orange, bottom):</span></strong><br>
+Linear rise during inspiration (constant flow → linear volume in VCV). Exponential return to baseline in expiration.<br>
+<span class="ic-alarm">Incomplete return = air trapping or circuit leak.</span><br>
+Peak value = delivered tidal volume (should match set VT).`
+  },
+
+  'circuit-check': {
+    title: 'PRE-CASE CIRCUIT CHECK',
+    body: `<strong>Before every anaesthetic — systematic check:</strong><br><br>
+<strong>1. Machine self-test</strong> — power on, confirm pass ✓<br>
+<strong>2. Gas supply</strong> — O₂ and air pipeline pressures adequate; cylinders as backup ✓<br>
+<strong>3. Circuit assembly</strong> — no leaks. Occlude Y-piece, manually inflate → pressure should hold ✓<br>
+<strong>4. CO₂ absorber</strong> — colour check (purple/white = exhausted → replace) ✓<br>
+<strong>5. APL valve</strong> — functioning and set correctly ✓<br>
+<strong>6. Vaporiser</strong> — filled, seated correctly, dial set to off ✓<br>
+<strong>7. Suction</strong> — working, Yankauer at hand ✓<br>
+<strong>8. Capnograph</strong> — sampling line connected, waveform visible ✓<br><br>
+<strong>Alarm limits:</strong><br>
+· High PIP: 10 cmH₂O above working PIP<br>
+· Low VT / disconnect alarm active<br>
+· ETCO₂ range: 25–55 mmHg<br>
+· FiO₂ alarm ≥ 30%`
+  },
+
+  // ── VENTILATOR MODE POP-UPS ───────────────────────────────
+
+  VCV: {
+    title: 'MODE: VCV — VOLUME CONTROL VENTILATION',
+    body: `<strong>Set parameters:</strong> Tidal Volume · RR · I:E · PEEP · FiO₂ · Flow rate<br><br>
+The ventilator delivers a <span class="ic-hl">fixed tidal volume</span> every breath — airway pressure varies with compliance and resistance.<br><br>
+<strong>Advantage:</strong> Guaranteed minute ventilation — you always know how much gas is being delivered.<br>
+<strong>Disadvantage:</strong> Pressure can rise unpredictably if compliance worsens or resistance increases.<br><br>
+<strong>Most common intraoperative ventilation mode.</strong><br>
+Set a PIP alarm 10 cmH₂O above your working pressure to catch changes early.`
+  },
+
+  PCV: {
+    title: 'MODE: PCV — PRESSURE CONTROL VENTILATION',
+    body: `<strong>Set parameters:</strong> Inspiratory pressure (Pinsp) · RR · I:E · PEEP · FiO₂<br><br>
+The ventilator delivers gas until a <span class="ic-hl">set pressure</span> is reached — tidal volume varies with compliance and resistance.<br><br>
+<strong>Advantage:</strong><br>
+· Decelerating flow waveform → better gas distribution<br>
+· Lower PIP for same VT compared to VCV<br>
+· More comfortable for spontaneously breathing patients<br><br>
+<strong>Disadvantage:</strong> VT not guaranteed — must monitor closely if compliance changes (e.g. position change, pneumoperitoneum).<br><br>
+Useful in: lung injury, poor compliance, paediatric cases, high airway pressures.`
+  },
+
+  PRVC: {
+    title: 'MODE: PRVC — PRESSURE-REGULATED VOLUME CONTROL',
+    body: `<strong>Hybrid mode</strong> — pressure-control delivery style, but the ventilator automatically adjusts Pinsp breath-by-breath to achieve a set volume target.<br><br>
+<strong>Advantages:</strong><br>
+· Guaranteed tidal volume (like VCV)<br>
+· Decelerating flow waveform and lower PIP (like PCV)<br>
+· Automatically adapts to changing lung compliance<br><br>
+If compliance worsens (e.g. pneumoperitoneum), the ventilator automatically ↑ Pinsp to maintain VT.<br><br>
+Known by different names depending on manufacturer: PRVC (Maquet) · AutoFlow (Dräger) · VC+ (Puritan Bennett) · APV-CMV (Hamilton).`
+  },
+
+  PSV: {
+    title: 'MODE: PSV — PRESSURE SUPPORT VENTILATION',
+    body: `<strong>Patient-triggered mode</strong> — every breath is initiated by the patient and augmented to a set pressure level.<br><br>
+<strong>Key features:</strong><br>
+· No set RR — patient controls breathing frequency<br>
+· Requires intact respiratory drive (not for deeply sedated or paralysed patients)<br>
+· Patient controls inspiratory time — better synchrony, more comfortable<br><br>
+<strong>Used for:</strong><br>
+· Spontaneously breathing patients under light sedation<br>
+· Weaning from mechanical ventilation<br>
+· Awake/minimally sedated patients in ICU<br><br>
+In OR: used when deliberately allowing spontaneous ventilation, or when transitioning off neuromuscular blockade.`
+  },
+
+  SIMV: {
+    title: 'MODE: SIMV — SYNCHRONIZED INTERMITTENT MANDATORY VENTILATION',
+    body: `Delivers a set number of <strong>mandatory breaths</strong> synchronized with patient effort, while allowing spontaneous breaths in between (which can be augmented with pressure support).<br><br>
+<strong>Historical context:</strong> Was widely used for weaning — the theory was gradual handover of work of breathing to the patient.<br><br>
+<strong>Current status:</strong> Largely fallen out of favour in modern ICU practice. Evidence shows PSV-based weaning protocols are superior for most patients.<br><br>
+Still used in some paediatric ventilation protocols. Understanding SIMV is important for clinical examinations and understanding the history of mechanical ventilation.`
+  },
+
+}; // ← END OF INFO OBJECT — do not delete this line
+
+// =============================================================
+// FUNCTIONS — do not edit below this line
+// =============================================================
+
+function showInfo(key) {
+  const panel = document.getElementById('infoPanel');
+  const d = INFO[key] || INFO[currentMode];
+  if (!d) return;
+  document.getElementById('infoTitle').textContent = d.title;
+  document.getElementById('infoBody').innerHTML = d.body;
+  panel.classList.add('visible');
+}
+
+function closeInfo() {
+  document.getElementById('infoPanel').classList.remove('visible');
+}
+
+let currentMode = 'VCV';
+function showMode(el, mode) {
+  document.querySelectorAll('.sb-btn').forEach(b => b.classList.remove('mode-active'));
+  el.classList.add('mode-active');
+  currentMode = mode;
+  document.getElementById('mode-disp').textContent = mode;
+  showInfo(mode);
+}
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+// Waveform animation
+const canvases = {
+  paw: document.getElementById('c-paw'),
+  flow: document.getElementById('c-flow'),
+  etco2: document.getElementById('c-etco2'),
+  vol: document.getElementById('c-vol'),
+};
+const ctxs = {};
+for (const k in canvases) { ctxs[k] = canvases[k].getContext('2d'); }
+
+let frame = 0;
+const RR = 14, CYCLE = 60 / RR, IE_FRAC = 1 / 3;
+
+function resizeAll() {
+  for (const k in canvases) {
+    canvases[k].width = canvases[k].offsetWidth || canvases[k].parentElement.offsetWidth;
+    canvases[k].height = canvases[k].offsetHeight || canvases[k].parentElement.offsetHeight;
+  }
+}
+
+function drawWave(key, color, getVal, minV, maxV) {
+  const cv = canvases[key], cx = ctxs[key];
+  const W = cv.width, H = cv.height;
+  if (!W || !H) return;
+  cx.clearRect(0, 0, W, H);
+  cx.strokeStyle = '#0d1a0d'; cx.lineWidth = 0.5;
+  for (let x = 0; x < W; x += 40) { cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, H); cx.stroke(); }
+  const midY = H / 2;
+  cx.beginPath(); cx.moveTo(0, midY); cx.lineTo(W, midY); cx.stroke();
+  cx.beginPath(); cx.strokeStyle = color; cx.lineWidth = 1.8;
+  const speed = 6;
+  for (let x = 0; x < W; x++) {
+    const t = ((x / W) * speed + (frame * 0.016)) % CYCLE;
+    const v = getVal(t);
+    const norm = (v - minV) / (maxV - minV);
+    const y = H - (norm * (H - 6) + 3);
+    x === 0 ? cx.moveTo(x, y) : cx.lineTo(x, y);
+  }
+  cx.stroke();
+}
+
+// PRESSURE WAVEFORM (VCV): rapid rise to PIP, brief flat plateau, then
+// sharp drop at end of inspiration, passive exponential decay back to PEEP
+function getValPaw(t) {
+  const Ti = CYCLE * IE_FRAC;       // inspiratory time
+  const Te = CYCLE * (1 - IE_FRAC); // expiratory time
+  const PEEP = 5, PIP = 28, PPLAT = 22;
+  if (t < Ti) {
+    const p = t / Ti;
+    if (p < 0.12) {
+      // Rapid rise to PIP
+      return PEEP + (PIP - PEEP) * (p / 0.12);
+    } else if (p < 0.30) {
+      // Brief overshoot then settle to plateau
+      const settle = (p - 0.12) / 0.18;
+      return PIP - (PIP - PPLAT) * settle;
+    } else {
+      // Flat plateau for rest of inspiration
+      return PPLAT;
+    }
+  } else {
+    // Expiration: drops sharply then exponential decay to PEEP
+    const ep = (t - Ti) / Te;
+    return PEEP + (PPLAT - PEEP) * Math.exp(-ep * 6);
+  }
+}
+
+// FLOW WAVEFORM: square wave inspiration (constant flow in VCV),
+// then passive exponential expiratory flow below baseline
+function getValFlow(t) {
+  const Ti = CYCLE * IE_FRAC;
+  const Te = CYCLE * (1 - IE_FRAC);
+  if (t < Ti) {
+    // Constant inspiratory flow (square wave — characteristic of VCV)
+    const p = t / Ti;
+    if (p < 0.04) return 35 * (p / 0.04); // tiny ramp-up at start
+    if (p > 0.96) return 35 * ((1 - p) / 0.04); // tiny ramp-down at end
+    return 35;
+  } else {
+    // Expiratory flow: peaks negative then exponentially returns to zero
+    const ep = (t - Ti) / Te;
+    return -28 * Math.exp(-ep * 2.5) * (1 - Math.exp(-ep * 10));
+  }
+}
+
+// VOLUME WAVEFORM: linear rise during inspiration (constant flow → linear volume),
+// then exponential return to baseline during expiration
+function getValVol(t) {
+  const Ti = CYCLE * IE_FRAC;
+  const Te = CYCLE * (1 - IE_FRAC);
+  if (t < Ti) {
+    return (t / Ti) * 500;
+  } else {
+    const ep = (t - Ti) / Te;
+    return 500 * Math.exp(-ep * 5);
+  }
+}
+
+// ETCO2 CAPNOGRAPHY WAVEFORM: classic 4-phase capnograph
+// Phase I: baseline (dead space, ~0 mmHg)
+// Phase II: rapid expiratory upstroke
+// Phase III: alveolar plateau (near-flat, slight rise to ~38 mmHg)
+// Phase 0: sharp inspiratory downstroke back to baseline
+function getValEtco2(t) {
+  const Ti = CYCLE * IE_FRAC;
+  const Te = CYCLE * (1 - IE_FRAC);
+  const BASELINE = 0, PLATEAU = 38;
+
+  if (t < Ti) {
+    // Inspiration: sharp downstroke to baseline (Phase 0)
+    const p = t / Ti;
+    if (p < 0.15) {
+      // Rapid drop from plateau to zero
+      return PLATEAU * (1 - p / 0.15);
+    }
+    // Flat baseline for rest of inspiration (Phase I — dead space)
+    return BASELINE;
+  } else {
+    // Expiration phases
+    const ep = (t - Ti) / Te;
+    if (ep < 0.20) {
+      // Phase II: rapid upstroke
+      return BASELINE + PLATEAU * (ep / 0.20);
+    } else if (ep < 0.85) {
+      // Phase III: flat alveolar plateau with slight upward slope
+      const plateauProgress = (ep - 0.20) / 0.65;
+      return PLATEAU + plateauProgress * 2; // slight slope ~2 mmHg
+    } else {
+      // End of expiration — plateau holds until inspiration cuts it
+      return PLATEAU + 2;
+    }
+  }
+}
+
+function animate() {
+  resizeAll();
+  drawWave('paw',   '#00e676', getValPaw,   0,  35);
+  drawWave('flow',  '#00bcd4', getValFlow, -32,  40);
+  drawWave('etco2', '#ffea00', getValEtco2,  0,  50);
+  drawWave('vol',   '#ff9800', getValVol,    0, 600);
+  frame++;
+  requestAnimationFrame(animate);
+}
+
+resizeAll();
+animate();
+</script>
+</body>
+</html>
